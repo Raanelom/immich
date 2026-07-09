@@ -73,23 +73,74 @@ begin
 set
   local vchordrq.probes = 1
 select
-  "asset".*
+  *
 from
-  "asset"
-  inner join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
-  inner join "smart_search" on "asset"."id" = "smart_search"."assetId"
-where
-  "asset"."fileCreatedAt" >= $1
-  and "asset_exif"."lensModel" = $2
-  and "asset"."ownerId" = any ($3::uuid[])
-  and "asset"."isFavorite" = $4
-  and "asset"."deletedAt" is null
+  (
+    select distinct
+      on ("candidates"."id") "candidates".*
+    from
+      (
+        select
+          "asset".*,
+          smart_search.embedding <=> $1 as "distance",
+          null as "videoTimestamp",
+          null as "videoFrameIndex",
+          1 as "sourceOrder"
+        from
+          "asset"
+          inner join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
+          inner join "smart_search" on "asset"."id" = "smart_search"."assetId"
+        where
+          "asset"."fileCreatedAt" >= $2
+          and "asset_exif"."lensModel" = $3
+          and "asset"."ownerId" = any ($4::uuid[])
+          and "asset"."isFavorite" = $5
+          and "asset"."deletedAt" is null
+        union all
+        select
+          "asset".*,
+          "video_ranked"."distance" as "distance",
+          "video_ranked"."timestamp" as "videoTimestamp",
+          "video_ranked"."frameIndex" as "videoFrameIndex",
+          0 as "sourceOrder"
+        from
+          "asset"
+          inner join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
+          inner join (
+            select
+              "smart_search_video"."assetId",
+              "smart_search_video"."timestamp",
+              "smart_search_video"."frameIndex",
+              smart_search_video.embedding <=> $6 as "distance",
+              row_number() over (
+                partition by
+                  smart_search_video."assetId"
+                order by
+                  smart_search_video.embedding <=> $7
+              ) as "rn"
+            from
+              "smart_search_video"
+          ) as "video_ranked" on "asset"."id" = "video_ranked"."assetId"
+          and "video_ranked"."rn" = $8
+        where
+          "asset"."fileCreatedAt" >= $9
+          and "asset_exif"."lensModel" = $10
+          and "asset"."ownerId" = any ($11::uuid[])
+          and "asset"."isFavorite" = $12
+          and "asset"."deletedAt" is null
+      ) as "candidates"
+    order by
+      "candidates"."id",
+      "candidates"."distance",
+      "candidates"."sourceOrder"
+  ) as "ranked"
 order by
-  smart_search.embedding <=> $5
+  "ranked"."distance",
+  "ranked"."id"
 limit
-  $6
+  $13
 offset
-  $7
+  $14
 commit
 
 -- SearchRepository.getEmbedding

@@ -409,18 +409,33 @@ where
       "assetId" = "asset"."id"
       and "asset_file"."type" = $2
   )
-  and not exists (
-    select
-    from
-      "smart_search"
-    where
-      "assetId" = "asset"."id"
+  and (
+    not exists (
+      select
+      from
+        "smart_search"
+      where
+        "assetId" = "asset"."id"
+    )
+    or (
+      "asset"."type" = $3
+      and not exists (
+        select
+        from
+          "smart_search_video"
+        where
+          "assetId" = "asset"."id"
+      )
+    )
   )
 
 -- AssetJobRepository.getForClipEncoding
 select
   "asset"."id",
   "asset"."visibility",
+  "asset"."type",
+  "asset"."duration",
+  "asset"."originalPath",
   (
     select
       coalesce(json_agg(agg), '[]')

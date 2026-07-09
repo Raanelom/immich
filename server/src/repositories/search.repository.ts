@@ -565,14 +565,14 @@ export class SearchRepository {
 
     return searchAssetBuilder(trx, options)
       .selectAll('asset')
-      .select([
-        sql<number>`video_ranked.distance`.as('distance'),
-        sql<number | null>`video_ranked.timestamp`.as('videoTimestamp'),
-        sql<number | null>`video_ranked.frameIndex`.as('videoFrameIndex'),
-        sql<number>`0`.as('sourceOrder'),
-      ])
       .innerJoin(ranked.as('video_ranked'), (join) =>
         join.onRef('asset.id', '=', 'video_ranked.assetId').on('video_ranked.rn', '=', 1),
-      );
+      )
+      .select((eb) => [
+        eb.ref('video_ranked.distance').as('distance'),
+        eb.ref('video_ranked.timestamp').as('videoTimestamp'),
+        eb.ref('video_ranked.frameIndex').as('videoFrameIndex'),
+        sql<number>`0`.as('sourceOrder'),
+      ]);
   }
 }

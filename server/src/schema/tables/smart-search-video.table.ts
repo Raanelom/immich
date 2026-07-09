@@ -1,4 +1,4 @@
-import { Column, ForeignKeyColumn, Index, Table } from '@immich/sql-tools';
+import { Column, ForeignKeyColumn, Index, PrimaryColumn, Table } from '@immich/sql-tools';
 import { AssetTable } from 'src/schema/tables/asset.table';
 
 @Table({ name: 'smart_search_video' })
@@ -10,10 +10,15 @@ import { AssetTable } from 'src/schema/tables/asset.table';
   synchronize: false,
 })
 export class SmartSearchVideoTable {
-  @ForeignKeyColumn(() => AssetTable, { onDelete: 'CASCADE' })
+  @ForeignKeyColumn(() => AssetTable, {
+    onDelete: 'CASCADE',
+    primary: true,
+    // [assetId, frameIndex] is the PK constraint
+    index: false,
+  })
   assetId!: string;
 
-  @Column({ type: 'integer' })
+  @PrimaryColumn({ type: 'integer' })
   frameIndex!: number;
 
   @Column({ type: 'integer' })
