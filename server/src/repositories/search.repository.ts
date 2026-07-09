@@ -284,14 +284,30 @@ export class SearchRepository {
     }
 
     return this.db.transaction().execute(async (trx) => {
-      await sql`set local vchordrq.probes = ${sql.lit(probes[VectorIndex.Clip])}`.execute(trx);
-      const items = await searchAssetBuilder(trx, options)
-        .selectAll('asset')
-        .innerJoin('smart_search', 'asset.id', 'smart_search.assetId')
-        .orderBy(sql`smart_search.embedding <=> ${options.embedding}`)
+      await sql`set local vchordrq.probes = ${sql.lit(Math.max(probes[VectorIndex.Clip], probes[VectorIndex.ClipVideo]))}`.execute(
+        trx,
+      );
+
+      const imageCandidates = this.buildSmartSearchImageCandidates(trx, options);
+      const videoCandidates = this.buildSmartSearchVideoCandidates(trx, options);
+
+      const rankedCandidates = trx
+        .selectFrom(imageCandidates.unionAll(videoCandidates).as('candidates'))
+        .distinctOn('candidates.id')
+        .selectAll('candidates')
+        .orderBy('candidates.id')
+        .orderBy('candidates.distance')
+        .orderBy('candidates.sourceOrder');
+
+      const items = await trx
+        .selectFrom(rankedCandidates.as('ranked'))
+        .selectAll()
+        .orderBy('ranked.distance')
+        .orderBy('ranked.id')
         .limit(pagination.size + 1)
         .offset((pagination.page - 1) * pagination.size)
         .execute();
+
       return paginationHelper(items, pagination.size);
     });
   }
@@ -455,54 +471,6 @@ export class SearchRepository {
     await this.db.deleteFrom('smart_search_video').where('assetId', '=', assetId).execute();
   }
 
-  @GenerateSql({
-    params: [
-      { page: 1, size: 200 },
-      {
-        takenAfter: DummyValue.DATE,
-        embedding: DummyValue.VECTOR,
-        lensModel: DummyValue.STRING,
-        withStacked: true,
-        isFavorite: true,
-        userIds: [DummyValue.UUID],
-      },
-    ],
-  })
-  searchSmartVideo(pagination: SearchPaginationOptions, options: SmartSearchOptions) {
-    if (!z.int().min(1).max(1000).safeParse(pagination.size).success) {
-      throw new Error(`Invalid value for 'size': ${pagination.size}`);
-    }
-
-    return this.db.transaction().execute(async (trx) => {
-      await sql`set local vchordrq.probes = ${sql.lit(probes[VectorIndex.ClipVideo])}`.execute(trx);
-
-      const ranked = trx
-        .selectFrom('smart_search_video')
-        .select([
-          'smart_search_video.assetId',
-          'smart_search_video.timestamp',
-          'smart_search_video.frameIndex',
-          sql<number>`smart_search_video.embedding <=> ${options.embedding}`.as('distance'),
-          sql<number>`row_number() over (partition by smart_search_video."assetId" order by smart_search_video.embedding <=> ${options.embedding})`.as(
-            'rn',
-          ),
-        ]);
-
-      const items = await searchAssetBuilder(trx, options)
-        .selectAll('asset')
-        .innerJoin(ranked.as('video_ranked'), (join) =>
-          join.onRef('asset.id', '=', 'video_ranked.assetId').on('video_ranked.rn', '=', 1),
-        )
-        .select(['video_ranked.timestamp', 'video_ranked.frameIndex', 'video_ranked.distance'])
-        .orderBy(sql`video_ranked.distance`)
-        .limit(pagination.size + 1)
-        .offset((pagination.page - 1) * pagination.size)
-        .execute();
-
-      return paginationHelper(items, pagination.size);
-    });
-  }
-
   async getCountries(userIds: string[]): Promise<string[]> {
     const res = await this.getExifField('country', userIds).execute();
     return res.map((row) => row.country!);
@@ -568,5 +536,43 @@ export class SearchRepository {
       .where('deletedAt', 'is', null)
       .where(field, 'is not', null)
       .where(field, '!=', '');
+  }
+
+  private buildSmartSearchImageCandidates(trx: Kysely<DB>, options: SmartSearchOptions) {
+    return searchAssetBuilder(trx, options)
+      .selectAll('asset')
+      .select([
+        sql<number>`smart_search.embedding <=> ${options.embedding}`.as('distance'),
+        sql<number | null>`null`.as('videoTimestamp'),
+        sql<number | null>`null`.as('videoFrameIndex'),
+        sql<number>`1`.as('sourceOrder'),
+      ])
+      .innerJoin('smart_search', 'asset.id', 'smart_search.assetId');
+  }
+
+  private buildSmartSearchVideoCandidates(trx: Kysely<DB>, options: SmartSearchOptions) {
+    const ranked = trx
+      .selectFrom('smart_search_video')
+      .select([
+        'smart_search_video.assetId',
+        'smart_search_video.timestamp',
+        'smart_search_video.frameIndex',
+        sql<number>`smart_search_video.embedding <=> ${options.embedding}`.as('distance'),
+        sql<number>`row_number() over (partition by smart_search_video."assetId" order by smart_search_video.embedding <=> ${options.embedding})`.as(
+          'rn',
+        ),
+      ]);
+
+    return searchAssetBuilder(trx, options)
+      .selectAll('asset')
+      .select([
+        sql<number>`video_ranked.distance`.as('distance'),
+        sql<number | null>`video_ranked.timestamp`.as('videoTimestamp'),
+        sql<number | null>`video_ranked.frameIndex`.as('videoFrameIndex'),
+        sql<number>`0`.as('sourceOrder'),
+      ])
+      .innerJoin(ranked.as('video_ranked'), (join) =>
+        join.onRef('asset.id', '=', 'video_ranked.assetId').on('video_ranked.rn', '=', 1),
+      );
   }
 }

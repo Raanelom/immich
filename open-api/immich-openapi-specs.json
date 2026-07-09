@@ -18019,6 +18019,20 @@
             "format": "date-time",
             "type": "string"
           },
+          "videoFrameIndex": {
+            "description": "Index of the best-matching video frame (null for images)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "videoTimestamp": {
+            "description": "Timestamp in milliseconds of the best-matching video frame (null for images)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
           "visibility": {
             "$ref": "#/components/schemas/AssetVisibility"
           },
@@ -18250,11 +18264,42 @@
           "modelName": {
             "description": "Name of the model to use",
             "type": "string"
+          },
+          "videoFrameInterval": {
+            "description": "Interval in seconds between extracted frames (time-based strategy)",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "videoFrameStrategy": {
+            "description": "Strategy for extracting frames from videos: time-based intervals or scene-change detection",
+            "enum": [
+              "time",
+              "scene"
+            ],
+            "type": "string"
+          },
+          "videoMaxFrames": {
+            "description": "Maximum number of frames to extract per video",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "videoSceneThreshold": {
+            "description": "Scene change detection threshold (scene-based strategy, lower = more sensitive)",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0.01,
+            "type": "number"
           }
         },
         "required": [
           "enabled",
-          "modelName"
+          "modelName",
+          "videoFrameInterval",
+          "videoFrameStrategy",
+          "videoMaxFrames",
+          "videoSceneThreshold"
         ],
         "type": "object"
       },

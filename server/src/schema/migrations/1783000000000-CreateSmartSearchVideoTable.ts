@@ -18,7 +18,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     db,
   );
 
-  await sql`ALTER TABLE "smart_search_video" ADD CONSTRAINT "smart_search_video_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "assets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE;`.execute(
+  await sql`ALTER TABLE "smart_search_video" ADD CONSTRAINT "smart_search_video_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "asset" ("id") ON UPDATE NO ACTION ON DELETE CASCADE;`.execute(
     db,
   );
 

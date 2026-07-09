@@ -267,6 +267,16 @@ describe(SearchService.name, () => {
       );
     });
 
+    it('should query smart search exactly once without doubling the page size', async () => {
+      await sut.searchSmart(authStub.user1, { query: 'test', size: 50 });
+
+      expect(mocks.search.searchSmart).toHaveBeenCalledTimes(1);
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 50 },
+        expect.objectContaining({ query: 'test' }),
+      );
+    });
+
     it('should use clip model specified in config', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: { clip: { modelName: 'ViT-B-16-SigLIP__webli' } },
