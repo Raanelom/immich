@@ -38,6 +38,7 @@ export type TimelineAsset = {
   people: string[] | null;
   latitude?: number | null;
   longitude?: number | null;
+  videoTimestamp: number | null;
 };
 
 export type MoveAsset = { asset: TimelineAsset; date: TimelineDate };

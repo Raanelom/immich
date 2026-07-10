@@ -927,6 +927,10 @@ export type AssetResponseDto = {
     "type": AssetTypeEnum;
     /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
     updatedAt: string;
+    /** Index of the best-matching video frame (null for images) */
+    videoFrameIndex?: number | null;
+    /** Timestamp in milliseconds of the best-matching video frame (null for images) */
+    videoTimestamp?: number | null;
     visibility: AssetVisibility;
     /** Asset width */
     width: number | null;
@@ -2444,6 +2448,14 @@ export type ClipConfig = {
     enabled: boolean;
     /** Name of the model to use */
     modelName: string;
+    /** Interval in seconds between extracted frames (time-based strategy) */
+    videoFrameInterval: number;
+    /** Strategy for extracting frames from videos: time-based intervals or scene-change detection */
+    videoFrameStrategy: VideoFrameStrategy;
+    /** Maximum number of frames to extract per video */
+    videoMaxFrames: number;
+    /** Scene change detection threshold (scene-based strategy, lower = more sensitive) */
+    videoSceneThreshold: number;
 };
 export type DuplicateDetectionConfig = {
     /** Whether the task is enabled */
@@ -7673,6 +7685,10 @@ export enum LogLevel {
     Warn = "warn",
     Error = "error",
     Fatal = "fatal"
+}
+export enum VideoFrameStrategy {
+    Time = "time",
+    Scene = "scene"
 }
 export enum ReleaseChannel {
     Stable = "stable",

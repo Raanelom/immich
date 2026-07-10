@@ -135,6 +135,8 @@ export interface VideoFormat {
   formatLongName?: string;
   duration: number;
   bitrate: number;
+  /** Container-level start time in seconds; non-zero for files with an edit-list/timestamp offset. */
+  startTime: number;
 }
 
 export interface ImageDimensions {

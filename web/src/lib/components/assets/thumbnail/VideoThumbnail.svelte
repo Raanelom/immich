@@ -1,13 +1,15 @@
 <script lang="ts">
   import { cleanClass } from '$lib';
   import { Icon, LoadingSpinner } from '@immich/ui';
-  import { mdiAlertCircleOutline, mdiPauseCircleOutline, mdiPlayCircleOutline } from '@mdi/js';
+  import { mdiAlertCircleOutline, mdiPauseCircleOutline, mdiPlayCircleOutline, mdiTargetVariant } from '@mdi/js';
   import { Duration } from 'luxon';
+  import { t } from 'svelte-i18n';
   import type { ClassValue } from 'svelte/elements';
 
   interface Props {
     url: string;
     durationInSeconds?: number;
+    matchedTimeInSeconds?: number;
     enablePlayback?: boolean;
     playbackOnIconHover?: boolean;
     showTime?: boolean;
@@ -20,6 +22,7 @@
   let {
     url,
     durationInSeconds = 0,
+    matchedTimeInSeconds,
     enablePlayback = $bindable(false),
     playbackOnIconHover = false,
     showTime = true,
@@ -28,6 +31,15 @@
     pauseIcon = mdiPauseCircleOutline,
     class: className,
   }: Props = $props();
+
+  const formatTime = (seconds: number) => {
+    if (seconds < 60) {
+      return Duration.fromObject({ seconds }).toFormat('m:ss');
+    } else if (seconds < 3600) {
+      return Duration.fromObject({ seconds }).toFormat('mm:ss');
+    }
+    return Duration.fromObject({ seconds }).toFormat('h:mm:ss');
+  };
 
   let remainingSeconds = $state(durationInSeconds);
   let loading = $state(true);
@@ -93,18 +105,26 @@
   ></video>
 {/if}
 
+{#if matchedTimeInSeconds !== undefined}
+  <div
+    class="@container absolute inset-x-0 top-0 flex place-items-center justify-start gap-1 text-xs font-medium text-white text-shadow-[1px_1px_6px_rgb(0_0_0)]"
+  >
+    <span
+      class="hidden items-center gap-1 ps-2 pt-2 @min-[100px]:flex"
+      title={$t('video_matched_moment', { values: { time: formatTime(matchedTimeInSeconds) } })}
+    >
+      <Icon icon={mdiTargetVariant} size="14" />
+      {formatTime(matchedTimeInSeconds)}
+    </span>
+  </div>
+{/if}
+
 <div
   class="@container absolute inset-x-0 top-0 flex place-items-center justify-end gap-1 text-xs font-medium text-white text-shadow-[1px_1px_6px_rgb(0_0_0)]"
 >
   {#if showTime}
     <span class="hidden pt-2 @min-[100px]:inline">
-      {#if remainingSeconds < 60}
-        {Duration.fromObject({ seconds: remainingSeconds }).toFormat('m:ss')}
-      {:else if remainingSeconds < 3600}
-        {Duration.fromObject({ seconds: remainingSeconds }).toFormat('mm:ss')}
-      {:else}
-        {Duration.fromObject({ seconds: remainingSeconds }).toFormat('h:mm:ss')}
-      {/if}
+      {formatTime(remainingSeconds)}
     </span>
   {/if}
 

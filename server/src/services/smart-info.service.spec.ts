@@ -1,10 +1,14 @@
 import { SystemConfig } from 'src/config';
-import { AssetFileType, AssetVisibility, ImmichWorker, JobName, JobStatus } from 'src/enum';
+import { AssetFileType, AssetType, AssetVisibility, ImmichWorker, JobName, JobStatus } from 'src/enum';
 import { SmartInfoService } from 'src/services/smart-info.service';
 import { getCLIPModelInfo } from 'src/utils/misc';
 import { AssetFactory } from 'test/factories/asset.factory';
+import { videoInfoStub } from 'test/fixtures/media.stub';
 import { systemConfigStub } from 'test/fixtures/system-config.stub';
 import { makeStream, newTestService, ServiceMocks } from 'test/utils';
+
+const createVideoAsset = () =>
+  AssetFactory.from({ type: AssetType.Video, duration: 60_000 }).file({ type: AssetFileType.Preview }).build();
 
 describe(SmartInfoService.name, () => {
   let sut: SmartInfoService;
@@ -246,6 +250,110 @@ describe(SmartInfoService.name, () => {
         expect.objectContaining({ modelName: 'ViT-B-32__openai' }),
       );
       expect(mocks.search.upsert).toHaveBeenCalledWith(asset.id, '[0.01, 0.02, 0.03]');
+    });
+  });
+
+  describe('handleEncodeClip (video)', () => {
+    const videoProbe = videoInfoStub.multipleVideoStreams;
+
+    it('should skip video frame extraction if frame rate cannot be determined', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoInfoStub.noVideoStreams);
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Failed);
+
+      expect(mocks.media.extractVideoFrames).not.toHaveBeenCalled();
+      expect(mocks.media.detectSceneChanges).not.toHaveBeenCalled();
+      expect(mocks.search.upsertVideoFrames).not.toHaveBeenCalled();
+    });
+
+    it('should extract and encode video frames using the time-based strategy', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.extractVideoFrames.mockResolvedValue([
+        { timestamp: 0, path: '/tmp/frame_1.jpg' },
+        { timestamp: 30_000, path: '/tmp/frame_2.jpg' },
+      ]);
+      mocks.machineLearning.encodeImage.mockResolvedValueOnce('[0.01, 0.02]').mockResolvedValueOnce('[0.03, 0.04]');
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.media.extractVideoFrames).toHaveBeenCalledWith(
+        asset.originalPath,
+        [0, 30_000],
+        videoProbe.videoStreams[0].frameRate,
+        expect.any(String),
+      );
+      expect(mocks.search.upsertVideoFrames).toHaveBeenCalledWith(asset.id, [
+        { frameIndex: 0, timestamp: 0, embedding: '[0.01, 0.02]' },
+        { frameIndex: 1, timestamp: 30_000, embedding: '[0.03, 0.04]' },
+      ]);
+    });
+
+    it('should pass the container start time to scene change detection', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue({
+        ...videoProbe,
+        format: { ...videoProbe.format, startTime: 300.08 },
+      });
+      mocks.media.detectSceneChanges.mockResolvedValue([1000]);
+      mocks.media.extractVideoFrames.mockResolvedValue([{ timestamp: 1000, path: '/tmp/frame_1.jpg' }]);
+      mocks.machineLearning.encodeImage.mockResolvedValue('[0.01, 0.02]');
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { clip: { videoFrameStrategy: 'scene' } },
+      });
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.media.detectSceneChanges).toHaveBeenCalledWith(asset.originalPath, 0.1, 20, 300.08);
+    });
+
+    it('should skip frames that fail to encode and continue with the rest', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.extractVideoFrames.mockResolvedValue([
+        { timestamp: 0, path: '/tmp/frame_1.jpg' },
+        { timestamp: 30_000, path: '/tmp/frame_2.jpg' },
+      ]);
+      mocks.machineLearning.encodeImage
+        .mockRejectedValueOnce(new Error('corrupt frame'))
+        .mockResolvedValueOnce('[0.03, 0.04]');
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.search.upsertVideoFrames).toHaveBeenCalledWith(asset.id, [
+        { frameIndex: 1, timestamp: 30_000, embedding: '[0.03, 0.04]' },
+      ]);
+    });
+
+    it('should fail if no frames could be extracted', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.extractVideoFrames.mockResolvedValue([]);
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Failed);
+
+      expect(mocks.search.upsertVideoFrames).not.toHaveBeenCalled();
+    });
+
+    it('should fail if no frames could be encoded', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.extractVideoFrames.mockResolvedValue([
+        { timestamp: 0, path: '/tmp/frame_1.jpg' },
+        { timestamp: 30_000, path: '/tmp/frame_2.jpg' },
+      ]);
+      mocks.machineLearning.encodeImage.mockRejectedValue(new Error('corrupt frame'));
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Failed);
+
+      expect(mocks.search.upsertVideoFrames).not.toHaveBeenCalled();
     });
   });
 

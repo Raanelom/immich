@@ -102,6 +102,7 @@ describe('getAltText', () => {
         city: city ?? null,
         country: country ?? null,
         people: people?.map((person: Person) => person.name) ?? [],
+        videoTimestamp: null,
       };
 
       getAltText.subscribe((fn) => {

@@ -52,6 +52,7 @@ export const timelineAssetFactory = Sync.makeFactory<TimelineAsset>({
   city: faker.location.city(),
   country: faker.location.country(),
   people: [faker.person.fullName()],
+  videoTimestamp: null,
 });
 
 export const toResponseDto = (...timelineAsset: TimelineAsset[]) => {

@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { Duration } from 'luxon';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import sharp from 'sharp';
 import { ORIENTATION_TO_SHARP_ROTATION } from 'src/constants';
@@ -241,6 +242,7 @@ export class MediaRepository {
         formatLongName: results.format.format_long_name,
         duration: this.parseFloat(results.format.duration),
         bitrate: this.parseInt(results.format.bit_rate),
+        startTime: this.parseFloat(results.format.start_time),
       },
       videoStreams: results.streams
         .filter((stream) => stream.codec_type === 'video' && !stream.disposition?.attached_pic)
@@ -556,30 +558,87 @@ export class MediaRepository {
     return outputFrames + median;
   }
 
-  async extractVideoFrames(input: string, timestamps: number[], outputDir: string): Promise<string[]> {
-    const outputPaths: string[] = [];
-
-    for (let i = 0; i < timestamps.length; i++) {
-      const timestamp = timestamps[i];
-      const outputPath = `${outputDir}/frame_${i}.jpg`;
-
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(input, { niceness: 10 })
-          .inputOptions(['-ss', String(timestamp / 1000)])
-          .outputOptions(['-frames:v', '1', '-q:v', '2'])
-          .output(outputPath)
-          .on('error', reject)
-          .on('end', () => resolve())
-          .run();
-      });
-
-      outputPaths.push(outputPath);
+  /**
+   * Extracts frames at the given timestamps (milliseconds, relative to the start of the video content) in a
+   * single sequential decode pass, using a frame-index `select` filter rather than per-frame `-ss` seeking.
+   *
+   * `-ss` seeking (both fast input-side and accurate output-side) is unreliable for files with a non-zero
+   * container start time (e.g. clips trimmed from a longer source without resetting timestamps): seeking to
+   * an otherwise-valid absolute position can silently decode zero frames, while sequential decoding through
+   * the exact same region works correctly. A single-pass sequential decode sidesteps this entirely and is
+   * also far cheaper than spawning one ffmpeg process per requested frame.
+   *
+   * Returns fewer entries than `timestamps` if some requested frames are beyond the actual decodable range.
+   */
+  async extractVideoFrames(
+    input: string,
+    timestamps: number[],
+    fps: number,
+    outputDir: string,
+  ): Promise<{ timestamp: number; path: string }[]> {
+    if (timestamps.length === 0 || !fps) {
+      return [];
     }
 
-    return outputPaths;
+    const frameIndexFor = (timestamp: number) => Math.max(0, Math.round((timestamp / 1000) * fps));
+    const uniqueFrameIndices = [...new Set(timestamps.map((timestamp) => frameIndexFor(timestamp)))].sort(
+      (a, b) => a - b,
+    );
+    const selectExpr = uniqueFrameIndices.map((frameIndex) => String.raw`eq(n\,${frameIndex})`).join('+');
+
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(input, { niceness: 10 })
+        .outputOptions([
+          '-vf',
+          `select='${selectExpr}'`,
+          '-vsync',
+          '0',
+          '-q:v',
+          '2',
+          '-frames:v',
+          String(uniqueFrameIndices.length),
+        ])
+        .output(join(outputDir, 'frame_%d.jpg'))
+        .on('start', (command: string) => this.logger.debug(command))
+        .on('error', (error, _, stderr) => reject(new Error(stderr?.trim() || error.message)))
+        .on('end', () => resolve())
+        .run();
+    });
+
+    // The image2 muxer numbers outputs 1..N in the order frames were selected, i.e. ascending frame index.
+    const pathByFrameIndex = new Map<number, string>();
+    for (const [i, frameIndex] of uniqueFrameIndices.entries()) {
+      const path = join(outputDir, `frame_${i + 1}.jpg`);
+      if (await this.pathExists(path)) {
+        pathByFrameIndex.set(frameIndex, path);
+      }
+    }
+
+    const frames: { timestamp: number; path: string }[] = [];
+    for (const timestamp of timestamps) {
+      const path = pathByFrameIndex.get(frameIndexFor(timestamp));
+      if (path) {
+        frames.push({ timestamp, path });
+      }
+    }
+
+    return frames;
   }
 
-  async detectSceneChanges(input: string, threshold: number, maxFrames: number): Promise<number[]> {
+  private async pathExists(path: string): Promise<boolean> {
+    try {
+      await fs.access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * @param startTime the container's start time in seconds (`VideoFormat.startTime`), used to normalize
+   * ffprobe's absolute `pts_time` output into timestamps relative to the start of the video content.
+   */
+  async detectSceneChanges(input: string, threshold: number, maxFrames: number, startTime: number): Promise<number[]> {
     return new Promise((resolve, reject) => {
       const timestamps: number[] = [];
       const ffprobe = spawn(
@@ -612,7 +671,7 @@ export class MediaRepository {
           }
           const ptsTime = Number.parseFloat(line.trim());
           if (!Number.isNaN(ptsTime)) {
-            timestamps.push(Math.round(ptsTime * 1000));
+            timestamps.push(Math.max(0, Math.round((ptsTime - startTime) * 1000)));
             if (timestamps.length >= maxFrames) {
               ffprobe.kill();
               resolve(timestamps);

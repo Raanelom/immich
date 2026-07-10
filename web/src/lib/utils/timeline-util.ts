@@ -191,6 +191,7 @@ export const toTimelineAsset = (unknownAsset: AssetResponseDto | TimelineAsset):
     people,
     latitude: assetResponse.exifInfo?.latitude || null,
     longitude: assetResponse.exifInfo?.longitude || null,
+    videoTimestamp: assetResponse.videoTimestamp ?? null,
   };
 };
 

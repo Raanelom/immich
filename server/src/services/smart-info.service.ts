@@ -140,6 +140,13 @@ export class SmartInfoService extends BaseService {
     const duration = asset.duration!;
     const maxFrames = clip.videoMaxFrames;
 
+    const { format, videoStreams } = await this.mediaRepository.probe(asset.originalPath);
+    const fps = videoStreams[0]?.frameRate;
+    if (!fps) {
+      this.logger.warn(`Could not determine frame rate for video ${asset.id}, skipping video frame extraction`);
+      return JobStatus.Failed;
+    }
+
     let timestamps: number[];
 
     if (clip.videoFrameStrategy === 'scene') {
@@ -147,6 +154,7 @@ export class SmartInfoService extends BaseService {
         asset.originalPath,
         clip.videoSceneThreshold,
         maxFrames,
+        format.startTime,
       );
     } else {
       const interval = clip.videoFrameInterval * 1000;
@@ -167,13 +175,32 @@ export class SmartInfoService extends BaseService {
     const tempDir = await mkdtemp(join(tmpdir(), `immich-video-frames-${asset.id}-`));
 
     try {
-      const framePaths = await this.mediaRepository.extractVideoFrames(asset.originalPath, timestamps, tempDir);
+      const extractedFrames = await this.mediaRepository.extractVideoFrames(
+        asset.originalPath,
+        timestamps,
+        fps,
+        tempDir,
+      );
+
+      if (extractedFrames.length === 0) {
+        this.logger.warn(`No frames could be extracted for video ${asset.id}`);
+        return JobStatus.Failed;
+      }
 
       const frames: { frameIndex: number; timestamp: number; embedding: string }[] = [];
 
-      for (let i = 0; i < framePaths.length; i++) {
-        const embedding = await this.machineLearningRepository.encodeImage(framePaths[i], clip);
-        frames.push({ frameIndex: i, timestamp: timestamps[i], embedding });
+      for (const [frameIndex, { timestamp, path }] of extractedFrames.entries()) {
+        try {
+          const embedding = await this.machineLearningRepository.encodeImage(path, clip);
+          frames.push({ frameIndex, timestamp, embedding });
+        } catch (error) {
+          this.logger.warn(`Could not encode video frame at ${timestamp}ms for asset ${asset.id}: ${error}`);
+        }
+      }
+
+      if (frames.length === 0) {
+        this.logger.warn(`No frames could be encoded for video ${asset.id}`);
+        return JobStatus.Failed;
       }
 
       if (this.databaseRepository.isBusy(DatabaseLock.CLIPDimSize)) {

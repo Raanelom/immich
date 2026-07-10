@@ -43,6 +43,8 @@ class AssetResponseDto {
     required this.thumbhash,
     required this.type,
     required this.updatedAt,
+    this.videoFrameIndex = const Optional.absent(),
+    this.videoTimestamp = const Optional.absent(),
     required this.visibility,
     required this.width,
   });
@@ -161,6 +163,18 @@ class AssetResponseDto {
   /// The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified.
   DateTime updatedAt;
 
+  /// Index of the best-matching video frame (null for images)
+  ///
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  Optional<int?> videoFrameIndex;
+
+  /// Timestamp in milliseconds of the best-matching video frame (null for images)
+  ///
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  Optional<int?> videoTimestamp;
+
   AssetVisibility visibility;
 
   /// Asset width
@@ -201,6 +215,8 @@ class AssetResponseDto {
     other.thumbhash == thumbhash &&
     other.type == type &&
     other.updatedAt == updatedAt &&
+    other.videoFrameIndex == videoFrameIndex &&
+    other.videoTimestamp == videoTimestamp &&
     other.visibility == visibility &&
     other.width == width;
 
@@ -237,11 +253,13 @@ class AssetResponseDto {
     (thumbhash == null ? 0 : thumbhash!.hashCode) +
     (type.hashCode) +
     (updatedAt.hashCode) +
+    (videoFrameIndex == null ? 0 : videoFrameIndex!.hashCode) +
+    (videoTimestamp == null ? 0 : videoTimestamp!.hashCode) +
     (visibility.hashCode) +
     (width == null ? 0 : width!.hashCode);
 
   @override
-  String toString() => 'AssetResponseDto[checksum=$checksum, createdAt=$createdAt, duplicateId=$duplicateId, duration=$duration, exifInfo=$exifInfo, fileCreatedAt=$fileCreatedAt, fileModifiedAt=$fileModifiedAt, hasMetadata=$hasMetadata, height=$height, id=$id, isArchived=$isArchived, isEdited=$isEdited, isFavorite=$isFavorite, isOffline=$isOffline, isTrashed=$isTrashed, libraryId=$libraryId, livePhotoVideoId=$livePhotoVideoId, localDateTime=$localDateTime, originalFileName=$originalFileName, originalMimeType=$originalMimeType, originalPath=$originalPath, owner=$owner, ownerId=$ownerId, people=$people, resized=$resized, stack=$stack, tags=$tags, thumbhash=$thumbhash, type=$type, updatedAt=$updatedAt, visibility=$visibility, width=$width]';
+  String toString() => 'AssetResponseDto[checksum=$checksum, createdAt=$createdAt, duplicateId=$duplicateId, duration=$duration, exifInfo=$exifInfo, fileCreatedAt=$fileCreatedAt, fileModifiedAt=$fileModifiedAt, hasMetadata=$hasMetadata, height=$height, id=$id, isArchived=$isArchived, isEdited=$isEdited, isFavorite=$isFavorite, isOffline=$isOffline, isTrashed=$isTrashed, libraryId=$libraryId, livePhotoVideoId=$livePhotoVideoId, localDateTime=$localDateTime, originalFileName=$originalFileName, originalMimeType=$originalMimeType, originalPath=$originalPath, owner=$owner, ownerId=$ownerId, people=$people, resized=$resized, stack=$stack, tags=$tags, thumbhash=$thumbhash, type=$type, updatedAt=$updatedAt, videoFrameIndex=$videoFrameIndex, videoTimestamp=$videoTimestamp, visibility=$visibility, width=$width]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -317,6 +335,14 @@ class AssetResponseDto {
     }
       json[r'type'] = this.type;
       json[r'updatedAt'] = this.updatedAt.toUtc().toIso8601String();
+    if (this.videoFrameIndex.isPresent) {
+      final value = this.videoFrameIndex.value;
+      json[r'videoFrameIndex'] = value;
+    }
+    if (this.videoTimestamp.isPresent) {
+      final value = this.videoTimestamp.value;
+      json[r'videoTimestamp'] = value;
+    }
       json[r'visibility'] = this.visibility;
     if (this.width != null) {
       json[r'width'] = this.width;
@@ -365,6 +391,8 @@ class AssetResponseDto {
         thumbhash: mapValueOfType<String>(json, r'thumbhash'),
         type: AssetTypeEnum.fromJson(json[r'type'])!,
         updatedAt: mapDateTime(json, r'updatedAt', r'')!,
+        videoFrameIndex: json.containsKey(r'videoFrameIndex') ? Optional.present(json[r'videoFrameIndex'] == null ? null : int.parse('${json[r'videoFrameIndex']}')) : const Optional.absent(),
+        videoTimestamp: json.containsKey(r'videoTimestamp') ? Optional.present(json[r'videoTimestamp'] == null ? null : int.parse('${json[r'videoTimestamp']}')) : const Optional.absent(),
         visibility: AssetVisibility.fromJson(json[r'visibility'])!,
         width: mapValueOfType<int>(json, r'width'),
       );

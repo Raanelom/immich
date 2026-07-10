@@ -204,6 +204,7 @@ export class TimelineMonth {
           : null,
         thumbhash: bucketAssets.thumbhash[i],
         people: null, // People are not included in the bucket assets
+        videoTimestamp: null, // Only populated for smart search results, not timeline buckets
       };
 
       if (bucketAssets.latitude?.[i] && bucketAssets.longitude?.[i]) {

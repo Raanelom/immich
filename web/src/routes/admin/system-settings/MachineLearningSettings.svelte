@@ -8,6 +8,7 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
+  import { VideoFrameStrategy } from '@immich/sdk';
   import { Button, IconButton } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
@@ -142,6 +143,56 @@
               </p>
             {/snippet}
           </SettingInputField>
+
+          <SettingSelect
+            label={$t('admin.machine_learning_video_frame_strategy')}
+            desc={$t('admin.machine_learning_video_frame_strategy_description')}
+            name="video-frame-strategy"
+            bind:value={configToEdit.machineLearning.clip.videoFrameStrategy}
+            options={[
+              { value: VideoFrameStrategy.Time, text: $t('admin.machine_learning_video_frame_strategy_time') },
+              { value: VideoFrameStrategy.Scene, text: $t('admin.machine_learning_video_frame_strategy_scene') },
+            ]}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.clip.enabled}
+            isEdited={configToEdit.machineLearning.clip.videoFrameStrategy !==
+              config.machineLearning.clip.videoFrameStrategy}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_video_frame_interval')}
+            description={$t('admin.machine_learning_video_frame_interval_description')}
+            bind:value={configToEdit.machineLearning.clip.videoFrameInterval}
+            step="1"
+            min={1}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.clip.enabled}
+            isEdited={configToEdit.machineLearning.clip.videoFrameInterval !==
+              config.machineLearning.clip.videoFrameInterval}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_video_max_frames')}
+            description={$t('admin.machine_learning_video_max_frames_description')}
+            bind:value={configToEdit.machineLearning.clip.videoMaxFrames}
+            step="1"
+            min={1}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.clip.enabled}
+            isEdited={configToEdit.machineLearning.clip.videoMaxFrames !== config.machineLearning.clip.videoMaxFrames}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_video_scene_threshold')}
+            description={$t('admin.machine_learning_video_scene_threshold_description')}
+            bind:value={configToEdit.machineLearning.clip.videoSceneThreshold}
+            step="0.01"
+            min={0.01}
+            max={1}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.clip.enabled}
+            isEdited={configToEdit.machineLearning.clip.videoSceneThreshold !==
+              config.machineLearning.clip.videoSceneThreshold}
+          />
         </div>
       </SettingAccordion>
 
