@@ -311,6 +311,51 @@ describe(SmartInfoService.name, () => {
       expect(mocks.media.detectSceneChanges).toHaveBeenCalledWith(asset.originalPath, 0.1, 20, 300.08);
     });
 
+    it('should fall back to the first frame when scene detection finds no scene changes', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.detectSceneChanges.mockResolvedValue([]);
+      mocks.media.extractVideoFrames.mockResolvedValue([{ timestamp: 0, path: '/tmp/frame_1.jpg' }]);
+      mocks.machineLearning.encodeImage.mockResolvedValue('[0.01, 0.02]');
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { clip: { videoFrameStrategy: 'scene' } },
+      });
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.media.extractVideoFrames).toHaveBeenCalledWith(
+        asset.originalPath,
+        [0],
+        videoProbe.videoStreams[0].frameRate,
+        expect.any(String),
+      );
+      expect(mocks.search.upsertVideoFrames).toHaveBeenCalledWith(asset.id, [
+        { frameIndex: 0, timestamp: 0, embedding: '[0.01, 0.02]' },
+      ]);
+    });
+
+    it('should fall back to the first frame when scene detection throws', async () => {
+      const asset = createVideoAsset();
+      mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);
+      mocks.media.probe.mockResolvedValue(videoProbe);
+      mocks.media.detectSceneChanges.mockRejectedValue(new Error('ffprobe exited with code 1'));
+      mocks.media.extractVideoFrames.mockResolvedValue([{ timestamp: 0, path: '/tmp/frame_1.jpg' }]);
+      mocks.machineLearning.encodeImage.mockResolvedValue('[0.01, 0.02]');
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { clip: { videoFrameStrategy: 'scene' } },
+      });
+
+      expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.media.extractVideoFrames).toHaveBeenCalledWith(
+        asset.originalPath,
+        [0],
+        videoProbe.videoStreams[0].frameRate,
+        expect.any(String),
+      );
+    });
+
     it('should skip frames that fail to encode and continue with the rest', async () => {
       const asset = createVideoAsset();
       mocks.assetJob.getForClipEncoding.mockResolvedValue(asset);

@@ -150,12 +150,23 @@ export class SmartInfoService extends BaseService {
     let timestamps: number[];
 
     if (clip.videoFrameStrategy === 'scene') {
-      timestamps = await this.mediaRepository.detectSceneChanges(
-        asset.originalPath,
-        clip.videoSceneThreshold,
-        maxFrames,
-        format.startTime,
-      );
+      try {
+        timestamps = await this.mediaRepository.detectSceneChanges(
+          asset.originalPath,
+          clip.videoSceneThreshold,
+          maxFrames,
+          format.startTime,
+        );
+        this.logger.log(`${timestamps.length} scene changes detected for video ${asset.id}`);
+      } catch (error) {
+        this.logger.warn(`Scene change detection failed for video ${asset.id}, falling back to first frame: ${error}`);
+        timestamps = [];
+      }
+
+      if (timestamps.length === 0) {
+        this.logger.warn(`No scene changes detected for video ${asset.id}, falling back to first frame`);
+        timestamps = [0];
+      }
     } else {
       const interval = clip.videoFrameInterval * 1000;
       timestamps = [];

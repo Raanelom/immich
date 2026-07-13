@@ -641,11 +641,16 @@ export class MediaRepository {
   async detectSceneChanges(input: string, threshold: number, maxFrames: number, startTime: number): Promise<number[]> {
     return new Promise((resolve, reject) => {
       const timestamps: number[] = [];
+      // escape backslashes and single quotes for the single-quoted `movie=` filter option, per ffmpeg's
+      // filtergraph escaping rules (https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping)
+      const escapedInput = input.replaceAll('\\', '\\\\').replaceAll(`'`, String.raw`'\\\''`);
       const ffprobe = spawn(
         'ffprobe',
         [
           '-v',
           'error',
+          '-fflags',
+          '+genpts',
           '-select_streams',
           'v:0',
           '-show_entries',
@@ -653,7 +658,7 @@ export class MediaRepository {
           '-f',
           'lavfi',
           `-i`,
-          String.raw`movie='${input}',select='gt(scene\,${threshold})'`,
+          String.raw`movie='${escapedInput}',select='gt(scene\,${threshold})'`,
           '-of',
           'csv=p=0',
         ],
