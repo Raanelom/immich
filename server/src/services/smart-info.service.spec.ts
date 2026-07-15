@@ -308,7 +308,7 @@ describe(SmartInfoService.name, () => {
 
       expect(await sut.handleEncodeClip({ id: asset.id })).toEqual(JobStatus.Success);
 
-      expect(mocks.media.detectSceneChanges).toHaveBeenCalledWith(asset.originalPath, 0.1, 20, 300.08);
+      expect(mocks.media.detectSceneChanges).toHaveBeenCalledWith(asset.originalPath, 0.1, 20, 300.08, 1);
     });
 
     it('should fall back to the first frame when scene detection finds no scene changes', async () => {

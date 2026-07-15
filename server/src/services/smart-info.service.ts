@@ -156,6 +156,7 @@ export class SmartInfoService extends BaseService {
           clip.videoSceneThreshold,
           maxFrames,
           format.startTime,
+          videoStreams[0].index,
         );
         this.logger.log(`${timestamps.length} scene changes detected for video ${asset.id}`);
       } catch (error) {

@@ -637,13 +637,29 @@ export class MediaRepository {
   /**
    * @param startTime the container's start time in seconds (`VideoFormat.startTime`), used to normalize
    * ffprobe's absolute `pts_time` output into timestamps relative to the start of the video content.
+   * @param streamIndex the absolute index of the video stream to analyze (see `VideoInfo.videoStreams[].index`
+   * from `probe()`), used to pin scene-change detection to the same video stream selected elsewhere in the
+   * pipeline for files with multiple video streams.
    */
-  async detectSceneChanges(input: string, threshold: number, maxFrames: number, startTime: number): Promise<number[]> {
+  async detectSceneChanges(
+    input: string,
+    threshold: number,
+    maxFrames: number,
+    startTime: number,
+    streamIndex: number,
+  ): Promise<number[]> {
     return new Promise((resolve, reject) => {
       const timestamps: number[] = [];
       // escape backslashes and single quotes for the single-quoted `movie=` filter option, per ffmpeg's
       // filtergraph escaping rules (https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping)
       const escapedInput = input.replaceAll('\\', '\\\\').replaceAll(`'`, String.raw`'\\\''`);
+      // The `movie=` source opens its own independent demuxer, completely separate from ffprobe's outer
+      // stream list - an outer `-select_streams` flag has no effect on which stream `movie=` decodes from
+      // (it would only filter ffprobe's view of the filtergraph's single synthetic output stream). To pin
+      // `movie=` to the same video stream selected by `probe()` (important for files with multiple video
+      // streams, e.g. dual-essence-track MXF), the stream must be selected *inside* the filter itself via
+      // its `si` (stream_index) option. The alternative `s`/`streams` stream-specifier option (e.g. `s=v:0`)
+      // is not usable here because the `:` in the specifier conflicts with ffmpeg's filter-option parsing.
       const ffprobe = spawn(
         'ffprobe',
         [
@@ -651,14 +667,12 @@ export class MediaRepository {
           'error',
           '-fflags',
           '+genpts',
-          '-select_streams',
-          'v:0',
           '-show_entries',
           'frame=pts_time',
           '-f',
           'lavfi',
           `-i`,
-          String.raw`movie='${escapedInput}',select='gt(scene\,${threshold})'`,
+          String.raw`movie='${escapedInput}':si=${streamIndex},select='gt(scene\,${threshold})'`,
           '-of',
           'csv=p=0',
         ],
